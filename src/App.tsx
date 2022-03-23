@@ -1,9 +1,9 @@
 import React from "react";
 import { ThemeProvider } from "@mui/system";
+import { CssBaseline } from "@mui/material";
 
 import { theme } from "./styles";
 import { Home } from "./pages";
-import { CssBaseline } from "@mui/material";
 
 function App() {
   return (

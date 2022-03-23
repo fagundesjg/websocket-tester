@@ -8,53 +8,44 @@ import {
   Typography,
 } from "@mui/material";
 import { useFormik } from "formik";
+import { format } from "date-fns";
 import * as Yup from "yup";
+import Editor from "@monaco-editor/react";
+import ReactJson from "react-json-view";
 
 import { IWebsocketMessage } from "./types";
-import { format } from "date-fns";
+import { verifyUrlIsValid } from "../../utils";
 
 const Home = () => {
   const [connected, setConnected] = useState<boolean>(false);
-  const [sendedMessages, setSendedMessages] = useState<IWebsocketMessage[]>([]);
+  const [sendedMessages, setSendedMessages] = useState<IWebsocketMessage[]>(
+    JSON.parse(localStorage.getItem("sendedMessages") ?? "[]")
+  );
   const [receivedMessages, setReceivedMessages] = useState<IWebsocketMessage[]>(
-    []
+    JSON.parse(localStorage.getItem("receivedMessages") ?? "[]")
   );
   const [message, setMessage] = useState<string>("");
   const [websocket, setWebsocket] = useState<WebSocket>();
   const formik = useFormik<{ url: string }>({
     initialValues: {
-      url: "",
+      url: localStorage.getItem("wsUrl") ?? "",
     },
     validateOnBlur: false,
     validateOnChange: false,
     onSubmit: (values) => {
+      localStorage.setItem("wsUrl", values.url);
       setWebsocket(new WebSocket(values.url));
     },
     validationSchema: Yup.object().shape({
       url: Yup.string()
         .required("Campo obrigatório")
         .test("verifyUrl", "Esse campo precisa ser uma URL válida", (value) => {
-          return !!(
-            value &&
-            value.includes("://") &&
-            (value.includes("http") ||
-              value.includes("https") ||
-              value.includes("ws") ||
-              value.includes("wss"))
-          );
+          return !!value && verifyUrlIsValid(value);
         }),
     }),
   });
 
   const { getFieldProps } = formik;
-
-  const getParsedMessage = (m: string) => {
-    try {
-      return JSON.stringify(JSON.parse(m), null, 2);
-    } catch (err) {
-      return m;
-    }
-  };
 
   const handleSendMessage = useCallback(() => {
     setSendedMessages((prev) => [
@@ -73,6 +64,10 @@ const Home = () => {
 
       websocket.onclose = (ev) => {
         setConnected(false);
+        setTimeout(() => {
+          const wsUrl = localStorage.getItem("wsUrl");
+          if (wsUrl) setWebsocket(new WebSocket(wsUrl));
+        }, 3000);
       };
 
       websocket.onmessage = (ev) => {
@@ -83,6 +78,25 @@ const Home = () => {
       };
     }
   }, [websocket]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "sendedMessages",
+      JSON.stringify(sendedMessages.slice(-50))
+    );
+  }, [sendedMessages]);
+
+  useEffect(() => {
+    const wsUrl = localStorage.getItem("wsUrl");
+    if (wsUrl) setWebsocket(new WebSocket(wsUrl));
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "receivedMessages",
+      JSON.stringify(receivedMessages.slice(-50))
+    );
+  }, [receivedMessages]);
 
   return (
     <Container maxWidth="lg" style={{ padding: "32px 16px" }}>
@@ -118,19 +132,24 @@ const Home = () => {
             />
           </Grid>
           <Grid item xs={12} md={2}>
-            <Button variant="contained" color="primary" fullWidth type="submit">
+            <Button
+              disabled={!verifyUrlIsValid(formik.values.url ?? "")}
+              variant="contained"
+              color="primary"
+              fullWidth
+              type="submit"
+            >
               Conectar
             </Button>
           </Grid>
           <Grid item xs={12} md={10}>
-            <TextField
-              fullWidth
-              multiline
-              rows={4}
-              placeholder='{ "foo": "bar" }'
-              label="Informe o payload de envio"
+            <Editor
+              height="20vh"
+              defaultLanguage="json"
+              theme="vs-dark"
               value={message}
-              onChange={(ev) => setMessage(ev.target.value ?? "")}
+              onChange={(value) => setMessage(value ?? "")}
+              options={{ fontSize: 14, fontWeight: "500" }}
             />
           </Grid>
           <Grid item xs={12} md={2}>
@@ -139,6 +158,7 @@ const Home = () => {
               variant="contained"
               color="primary"
               fullWidth
+              disabled={!verifyUrlIsValid(formik.values.url ?? "")}
             >
               Enviar
             </Button>
@@ -152,8 +172,13 @@ const Home = () => {
               md={6}
               alignContent="flex-start"
             >
-              <Grid item xs={12}>
-                <Typography variant="h6">Envios</Typography>
+              <Grid item xs={12} container spacing={2}>
+                <Grid item>
+                  <Typography variant="h6">Envios</Typography>
+                </Grid>
+                <Grid item>
+                  <Button onClick={() => setSendedMessages([])}>Limpar</Button>
+                </Grid>
               </Grid>
               <Grid item xs={12} container direction="column">
                 {sendedMessages.map((sended, index) => (
@@ -168,16 +193,26 @@ const Home = () => {
                         "dd/MM/yyyy HH:mm:ss"
                       )}
                     </Typography>
-                    <pre>
-                      <code>{getParsedMessage(sended.message)}</code>
-                    </pre>
+                    <ReactJson
+                      src={JSON.parse(sended.message)}
+                      theme="tomorrow"
+                      iconStyle="square"
+                      indentWidth={2}
+                    />
                   </Paper>
                 ))}
               </Grid>
             </Grid>
             <Grid container spacing={2} item xs={12} md={6}>
-              <Grid item xs={12}>
-                <Typography variant="h6">Respostas</Typography>
+              <Grid item xs={12} container spacing={2}>
+                <Grid item>
+                  <Typography variant="h6">Respostas</Typography>
+                </Grid>
+                <Grid item>
+                  <Button onClick={() => setReceivedMessages([])}>
+                    Limpar
+                  </Button>
+                </Grid>
               </Grid>
               <Grid item xs={12} container direction="column">
                 {receivedMessages.map((received, index) => (
@@ -192,9 +227,12 @@ const Home = () => {
                         "dd/MM/yyyy HH:mm:ss"
                       )}
                     </Typography>
-                    <pre>
-                      <code>{getParsedMessage(received.message)}</code>
-                    </pre>
+                    <ReactJson
+                      src={JSON.parse(received.message)}
+                      theme="tomorrow"
+                      iconStyle="square"
+                      indentWidth={2}
+                    />
                   </Paper>
                 ))}
               </Grid>
