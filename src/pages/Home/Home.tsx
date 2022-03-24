@@ -39,6 +39,7 @@ const Home = () => {
   );
   const [message, setMessage] = useState<string>("");
   const [websocket, setWebsocket] = useState<WebSocket>();
+
   const formik = useFormik<{ url: string }>({
     initialValues: {
       url: localStorage.getItem("wsUrl") ?? "",
@@ -47,6 +48,7 @@ const Home = () => {
     validateOnChange: false,
     onSubmit: (values) => {
       localStorage.setItem("wsUrl", values.url);
+      if (websocket) websocket.close();
       setWebsocket(new WebSocket(values.url));
     },
     validationSchema: Yup.object().shape({
